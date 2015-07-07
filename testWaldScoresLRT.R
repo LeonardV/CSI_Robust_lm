@@ -1,4 +1,5 @@
-testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat) {
+#Parts of this R code are taken from the Robustbase package.
+testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
   
   x <- as.matrix(x)
   n <- nrow(x)
@@ -47,8 +48,9 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat) {
   M221 <- M[idx1,idx1] - M[idx1,idx0] %*% solve(M[idx0,idx0,drop=FALSE], 
                                                 M[idx0,idx1,drop=FALSE])
 
-#  M221 <- M[(p0+1):p,(p0+1):p] - M[(p0+1):p,1:p0] %*% solve(M[1:p0,1:p0,drop=FALSE], 
-#                                                          M[1:p0,(p0+1):p,drop=FALSE])
+#  p0 <- length(idx0)
+#  M[(p0+1):p,(p0+1):p] - M[(p0+1):p,1:p0] %*% solve(M[1:p0,1:p0,drop=FALSE], 
+#                                                    M[1:p0,(p0+1):p,drop=FALSE])
 
   weightsZ <- psi0.c2 
   Z <- t(x) %*% weightsZ / n  
@@ -59,7 +61,7 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat) {
   Dmat <- V22.inv
   dvec <- t(Dn)%*%V22.inv
   #constrained optimization
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat[,idx1], bvec=bvec, meq=0) 
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat%*%t(Amat), bvec=bvec, meq=meq) 
   b <- out$solution
   TS_W2 <- (t(Dn)%*%Dmat%*%Dn)   
   TS_W  <- (t(Dn)%*%Dmat%*%Dn) - (t(Dn-b)%*%Dmat%*%(Dn-b)) 
@@ -69,15 +71,31 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat) {
   An <- sqrt(n) * solve(M221) %*% Z[idx1]     
   Dn <- An
   dvec <- t(Dn)%*%V22.inv
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat[,idx1], bvec=bvec, meq=0)   
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat%*%t(Amat), bvec=bvec, meq=meq)   
   b <- out$solution
   TS_S2 <- (t(Dn)%*%Dmat%*%Dn)
   TS_S <- (t(Dn)%*%Dmat%*%Dn) - (t(Dn-b)%*%Dmat%*%(Dn-b))
 
+  #Score-type test, extention Markautou and Hettmansperger (1990) (see Silvapulle, 1996)
+  #result.u <- M221 %*% V[idx1,idx1] %*% t(M221)
+  result.u <- Q[idx1,idx1]-M[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], Q[idx0,idx1,drop=F]) - 
+              Q[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], M[idx0,idx1,drop=F])+
+              M[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], Q[idx0,idx0,drop=F])%*%
+               solve(M[idx0,idx0,drop=F], M[idx0,idx1,drop=F])
+  
+  U <- sqrt(n) * solve(M221) %*% Z[idx1]     
+  A.tilde <- solve(M221) %*% result.u %*% t(solve(M221))
+  Dmat <- A.tilde
+  dvec <- t(U)%*%A.tilde
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat%*%t(Amat), bvec=bvec, meq=meq)   
+  b <- out$solution
+  TS_MH <- (t(U)%*%Dmat%*%U) - (t(U-b)%*%Dmat%*%(U-b))
+  
   return(list(TS_W = TS_W,          
               TS_W2 = TS_W2,
               result_W = result_W,
               TS_S = TS_S,
+              TS_MH = TS_MH,
               TS_S2 = TS_S2,
               V22 = V22
              )
