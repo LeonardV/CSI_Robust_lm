@@ -5,7 +5,7 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
   n <- nrow(x)
   p <- ncol(x)
   idx0 <- which(colSums(Amat) == 0)
-  idx1 <- which(colSums(Amat) == 1)
+  idx1 <- c(which(colSums(Amat) == 1) , which(colSums(Amat) == -1))
   
   #tukey bisquare tuning constant
   c2 = 4.685061
@@ -38,7 +38,9 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
   Minv <- solve(M)
   #information matrix 
   V <- Minv %*% Q %*% t(Minv)
-  V22 <- Amat %*% V %*% t(Amat)
+  V22 <- V[idx1,idx1]
+  #this produces problems when the constraints are not ordered!
+  #V22 <- Amat %*% V %*% t(Amat)
   #inverse information matrix
   #V.inv <- solve(V)
   #submatrix of V
@@ -52,6 +54,7 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
 #  M[(p0+1):p,(p0+1):p] - M[(p0+1):p,1:p0] %*% solve(M[1:p0,1:p0,drop=FALSE], 
 #                                                    M[1:p0,(p0+1):p,drop=FALSE])
 
+
   weightsZ <- psi0.c2 
   Z <- t(x) %*% weightsZ / n  
 
@@ -61,7 +64,7 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
   Dmat <- V22.inv
   dvec <- t(Dn)%*%V22.inv
   #constrained optimization
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat%*%t(Amat), bvec=bvec, meq=meq) 
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(Amat[,idx1]), bvec=bvec, meq=meq) 
   b <- out$solution
   TS_W2 <- (t(Dn)%*%Dmat%*%Dn)   
   TS_W  <- (t(Dn)%*%Dmat%*%Dn) - (t(Dn-b)%*%Dmat%*%(Dn-b)) 
@@ -71,7 +74,7 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
   An <- sqrt(n) * solve(M221) %*% Z[idx1]     
   Dn <- An
   dvec <- t(Dn)%*%V22.inv
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat%*%t(Amat), bvec=bvec, meq=meq)   
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(Amat[,idx1]), bvec=bvec, meq=meq)   
   b <- out$solution
   TS_S2 <- (t(Dn)%*%Dmat%*%Dn)
   TS_S <- (t(Dn)%*%Dmat%*%Dn) - (t(Dn-b)%*%Dmat%*%(Dn-b))
@@ -83,13 +86,13 @@ testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
               M[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], Q[idx0,idx0,drop=F])%*%
                solve(M[idx0,idx0,drop=F], M[idx0,idx1,drop=F])
   
-  U <- sqrt(n) * solve(M221) %*% Z[idx1]     
+  U <- 1/sqrt(n) * solve(M221) %*% Z[idx1]     
   A.tilde <- solve(M221) %*% result.u %*% t(solve(M221))
   Dmat <- A.tilde
   dvec <- t(U)%*%A.tilde
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=Amat%*%t(Amat), bvec=bvec, meq=meq)   
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(Amat[,idx1]), bvec=bvec, meq=meq)   
   b <- out$solution
-  TS_MH <- (t(U)%*%Dmat%*%U) - (t(U-b)%*%Dmat%*%(U-b))
+  TS_MH <- (t(U)%*%Dmat%*%U) - (t(U-b)%*%Dmat%*%(U-b)) 
   
   return(list(TS_W = TS_W,          
               TS_W2 = TS_W2,
