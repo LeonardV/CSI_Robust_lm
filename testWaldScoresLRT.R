@@ -1,108 +1,117 @@
-#Parts of this R code are taken from the Robustbase package.
-testWaldScoresLRT <- function(y, x, beta0, beta2, sigma, Amat, meq) {
+robustWaldScoresLRT <- function(y=y, x=x, beta0=beta0, betaA=betaA, sigma=sigma, 
+                                Amat=Amat, bvec=bvec, meq=meq) { 
+  
+  
+  if (qr(Amat)$rank < nrow(Amat)) {
+    stop("Constraints matrix must have full row-rank.")
+  }
+  if (is.null(Amat)) {
+    stop("No constraints matrix has been specified.")
+  }
+  if (meq == nrow(Amat)) {
+    stop("Test not applicable with equality restrictions only.")
+  }
+  if (is.null(bvec)) {
+    bvec <- rep(0, nrow(Amat))
+  }
+  if (!is.vector(bvec)) {
+    stop("bvec must be a vector.")
+  }
   
   x <- as.matrix(x)
   n <- nrow(x)
   p <- ncol(x)
-  idx0 <- which(colSums(Amat) == 0)
-  idx1 <- c(which(colSums(Amat) == 1) , which(colSums(Amat) == -1))
-  
+   
   #tukey bisquare tuning constant
-  c2 = 4.685061
+  c = 4.685061
   
   #Calculate M, Q, V 
   res0 <- y - x%*%beta0
-  res2 <- y - x%*%beta2
-    
+  res2 <- y - x%*%betaA
+  
   rstar0 <- res0/sigma                                                         
   rstar2 <- res2/sigma
   
-  psi0.c2   <- tukeyChi(rstar0, cc=c2, deriv=1)  
-  psi1.c2   <- tukeyChi(rstar2, cc=c2, deriv=1) 
-  psideriv0.c2 <- tukeyChi(rstar0, cc=c2, deriv=2) 
-  psideriv1.c2 <- tukeyChi(rstar2, cc=c2, deriv=2) 
+  psi0   <- tukeyChi(rstar0, cc=c, deriv=1)  
+  psi1   <- tukeyChi(rstar2, cc=c, deriv=1) 
+  psideriv0 <- tukeyChi(rstar0, cc=c, deriv=2) 
+  psideriv1 <- tukeyChi(rstar2, cc=c, deriv=2) 
   
   #compute M 
-  weightsM <- psideriv1.c2 / sigma             
+  weightsM <- psideriv1 / sigma             
   WM <- weightsM %*% rep(1, p)
   xwM <- x * WM
   M <- t(x) %*% xwM / n
   
   #compute Q 
-  weightsQ <- psi1.c2^2
+  weightsQ <- psi1^2
   WQ <- weightsQ %*% rep(1, p)
   xwQ <- x * WQ
   Q <- t(x) %*% xwQ / n
+  
+  
+  idx1 <- which(colSums(abs(Amat)) > 0L)
+  idx0 <- which(colSums(abs(Amat)) == 0L)
   
   #Calculate V 
   Minv <- solve(M)
   #information matrix 
   V <- Minv %*% Q %*% t(Minv)
+
+# V[(p0+1):pa,(p0+1):pa]
+  
   V22 <- V[idx1,idx1]
-  #this produces problems when the constraints are not ordered!
-  #V22 <- Amat %*% V %*% t(Amat)
+  
   #inverse information matrix
   #V.inv <- solve(V)
   #submatrix of V
   V22.inv <- solve(V22)
-#  V22.inv <- Amat %*% V.inv %*% t(Amat)
   
+  #Schur complement?
   M221 <- M[idx1,idx1] - M[idx1,idx0] %*% solve(M[idx0,idx0,drop=FALSE], 
                                                 M[idx0,idx1,drop=FALSE])
 
-#  p0 <- length(idx0)
-#  M[(p0+1):p,(p0+1):p] - M[(p0+1):p,1:p0] %*% solve(M[1:p0,1:p0,drop=FALSE], 
-#                                                    M[1:p0,(p0+1):p,drop=FALSE])
-
-
-  weightsZ <- psi0.c2 
+#  M221 <- M[(p0+1):p,(p0+1):p] - M[(p0+1):p,1:p0] %*% solve(M[1:p0,1:p0,drop=FALSE], M[1:p0,(p0+1):p,drop=FALSE])
+ 
+  weightsZ <- psi0
   Z <- t(x) %*% weightsZ / n  
-
+  
+  
   #Wald-type test statistic, Silvapulle (1996, eq. 2.6)
-  Tn <- sqrt(n)*beta2[idx1]
+  #FIXME Amat%*%betaA, e.g., c(0,-1,0,0) %*% c(b1,b2,b3,b4) produces a negative value for b2.
+  Tn <- sqrt(n)*(Amat%*%betaA)
   Dn <- Tn
-  Dmat <- V22.inv
-  dvec <- t(Dn)%*%V22.inv
-  #constrained optimization
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(Amat[,idx1]), bvec=bvec, meq=meq) 
+  Dmat <- solve(Amat[,idx1,drop=FALSE]%*%V22%*%t(Amat[,idx1,drop=FALSE]))
+  dvec <- t(Dn)%*%Dmat
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(diag(length(dvec))), bvec=bvec, meq=meq) 
   b <- out$solution
-  TS_W2 <- (t(Dn)%*%Dmat%*%Dn)   
   TS_W  <- (t(Dn)%*%Dmat%*%Dn) - (t(Dn-b)%*%Dmat%*%(Dn-b)) 
-  result_W <- n * beta2[idx1] %*% solve(V22, beta2[idx1])
+  #unconstrained
+  #n * betaA[idx1] %*% solve(V22, betaA[idx1]) 
+
   
   #Score-type test (Silvapulle, 1996, eq. 2.6)
-  An <- sqrt(n) * solve(M221) %*% Z[idx1]     
+  An <- sqrt(n) * Amat[,idx1,drop=FALSE]%*%(solve(M221) %*% Z[idx1])
   Dn <- An
-  dvec <- t(Dn)%*%V22.inv
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(Amat[,idx1]), bvec=bvec, meq=meq)   
+  Dmat <- solve(Amat[,idx1,drop=FALSE]%*%V22%*%t(Amat[,idx1,drop=FALSE]))
+  dvec <- t(Dn)%*%Dmat
+  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(diag(length(dvec))), bvec=bvec, meq=meq) 
   b <- out$solution
-  TS_S2 <- (t(Dn)%*%Dmat%*%Dn)
   TS_S <- (t(Dn)%*%Dmat%*%Dn) - (t(Dn-b)%*%Dmat%*%(Dn-b))
 
-  #Score-type test, extention Markautou and Hettmansperger (1990) (see Silvapulle, 1996)
-  #result.u <- M221 %*% V[idx1,idx1] %*% t(M221)
-  result.u <- Q[idx1,idx1]-M[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], Q[idx0,idx1,drop=F]) - 
-              Q[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], M[idx0,idx1,drop=F])+
-              M[idx1,idx0]%*% solve(M[idx0,idx0,drop=F], Q[idx0,idx0,drop=F])%*%
-               solve(M[idx0,idx0,drop=F], M[idx0,idx1,drop=F])
-  
-  U <- 1/sqrt(n) * solve(M221) %*% Z[idx1]     
-  A.tilde <- solve(M221) %*% result.u %*% t(solve(M221))
-  Dmat <- A.tilde
-  dvec <- t(U)%*%A.tilde
-  out <- quadprog:::solve.QP(Dmat=Dmat, dvec=dvec, Amat=t(Amat[,idx1]), bvec=bvec, meq=meq)   
-  b <- out$solution
-  TS_MH <- (t(U)%*%Dmat%*%U) - (t(U-b)%*%Dmat%*%(U-b)) 
-  
+  #unconstrained
+  #result.C <- M221 %*% V22 %*% t(M221)
+  #result.R <- n * t(Z[idx1]) %*% solve(result.C, Z[idx1])
+
   return(list(TS_W = TS_W,          
-              TS_W2 = TS_W2,
-              result_W = result_W,
+              #TS_W2 = TS_W2,
+              #result_W = result_W,
               TS_S = TS_S,
-              TS_MH = TS_MH,
-              TS_S2 = TS_S2,
-              V22 = V22
-             )
-        )
+              #TS_MH = TS_MH,
+              #TS_S2 = TS_S2,
+              V22 = Dmat
+  )
+  )
   
 }
 
