@@ -50,7 +50,7 @@ robustCsi <- function(X, y, Amat, bvec, meq) {
   
   
   ## robust Wald (W1, W2) and score test-statistics ##
-  TS <- testWaldScoresLRT(y=y, x=X, beta0, beta2, sigma, Amat, meq=meq)
+  TS <- robustWaldScoresLRT(y=y, x=X, beta0, beta2, sigma, Amat, meq=meq)
   statistics[c(2,3,5)] <- unlist(TS)[c("TS_W", "TS_S", "TS_MH")]
   
   cov <- TS$V22
