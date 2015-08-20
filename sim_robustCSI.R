@@ -1,5 +1,5 @@
 sim_robustCsi <- function(constraints=NULL, 
-                          N=c(15,25,50), d=0, eta.vec=12, cont=0.10, cont.x=1, 
+                          N=c(15,25,50), d=0, eta.vec=12, cont=0.10, cont.x=2, 
                           R=999, ncpus=1, seed=123, verbose=TRUE) {
   
   #checks
@@ -23,8 +23,8 @@ sim_robustCsi <- function(constraints=NULL,
     if(length(d) > 1) { betas <- c(1,1,d[j],d[j],d[j]) } else { betas <- c(1,1,d,d,d)}
     if(length(eta.vec) > 1) { eta <- eta.vec[j] } else { eta <- eta.vec }
     
-    statistics <- pvalues_chi <- pvalues_f <- matrix(NA, R, 5)
-    colnames(statistics) <- colnames(pvalues_chi) <- colnames(pvalues_f) <- c("W1", "W2", "S", "Fm", "Fbar")
+    statistics <- pvalues_chi <- pvalues_f <- matrix(NA, R, 4)
+    colnames(statistics) <- colnames(pvalues_chi) <- colnames(pvalues_f) <- c("W1", "S", "W2", "Fm")
     
     for(i in 1:R) {
       set.seed(seed+i)
@@ -36,7 +36,10 @@ sim_robustCsi <- function(constraints=NULL,
       X[idx,cont.x] <- rnorm(length(idx), 5, 0.1)  
       y[idx] <- rnorm(length(idx), eta, 0.1)  
 
-      object <- MASS:::rlm(y~X, method="MM", maxit=500)
+      Data <- data.frame(y=y, X=X[,-1])
+        colnames(Data) <- c("y","x1","x2","x3","x4")
+            
+      object <- MASS:::rlm(y~x1+x2+x3+x4, data=Data, method="MM", maxit=5000)
       
       # build a bare-bones parameter table for this object
       lavpartable <- lav_partable(object, est = TRUE, label = TRUE)
@@ -51,7 +54,7 @@ sim_robustCsi <- function(constraints=NULL,
       bvec <- res_constraints_rhs_bvec(object, constraints=constraints)
       
       
-      out <- restriktor(object, constraints=constraints, control=list(maxit=500))
+      out <- restriktor(object, constraints=constraints, control=list(maxit=5000))
       statistics[i,1:4]  <- out$statistics
       pvalues_chi[i,1:4] <- out$pvalues_chi
       pvalues_f[i,1:4]   <- out$pvalues_f
