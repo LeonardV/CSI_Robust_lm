@@ -20,7 +20,7 @@ csi.rlm <- function(object=NULL, Amat=NULL, bvec=NULL, meq=0) {
   
   pvalues_chi <- pvalues_f <- statistics <- rep(as.numeric(NA), 4)
   convergence <- vector("numeric", 3)
-  names(pvalues_chi) <- names(pvalues_f) <- names(statistics) <- c("W1", "S", "W2", "Fm")
+  names(pvalues_chi) <- names(pvalues_f) <- names(statistics) <- c("W1", "S", "Fm", "W2")
   
   mfit <- object$model
   Y <- model.response(mfit)
@@ -64,8 +64,7 @@ csi.rlm <- function(object=NULL, Amat=NULL, bvec=NULL, meq=0) {
   rfit0 <- crlm(x=X, y=Y, Amat=Amat, meq=nrow(Amat), bvec=bvec, weights=weights, w=w, 
                 init=init, psi=psi, scale.est=scale.est, k2=k2, method=method, wt.method=wt.method,
                 maxit=maxit, acc=acc, test.vec=test.vec, lqs.control=lqs.control) 
-  
-  
+    
   rfit1 <- crlm(x=X, y=Y, Amat=Amat, meq=meq, bvec=bvec, weights=weights, w=w, 
                 init=init, psi=psi, scale.est=scale.est, k2=k2, method=method, wt.method=wt.method,
                 maxit=maxit, acc=acc, test.vec=test.vec, lqs.control=lqs.control)
