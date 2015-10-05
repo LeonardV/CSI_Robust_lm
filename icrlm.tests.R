@@ -17,6 +17,7 @@ icrlm.tests <- function(object, type="A", meq.alt = 0, tol = 1e-04, test="Fm") {
   if(is.null(object.rlm$model)) {
     Y <- object.rlm$residuals + object.rlm$fitted
   } else {
+    Data <- object.rlm$model
     mfit <- object.rlm$model
     Y <- model.response(mfit)  
   }  
@@ -71,19 +72,18 @@ icrlm.tests <- function(object, type="A", meq.alt = 0, tol = 1e-04, test="Fm") {
     }
     else {
       call.my <- list(Amat = Amat, meq = nrow(Amat), bvec = bvec)  
+      call.rlm[["data"]] <- as.name("Data")
       CALL <- c(call.rlm, call.my)
       if(any(duplicated(CALL))) {
         stop("duplicated elements in CALL.list")
       }
-      Data <- object.rlm$model
-      call.rlm[["data"]] <- as.name("Data")
       rfit <- do.call("icrlm.formula", CALL)
     }
     # null model - equality constraints
     beta.eqconstr <- coef(rfit)
       names(beta.eqconstr) <- var.names
     # vector with the indices of the active constraints
-    iact <- rfit$iact
+    #iact <- rfit$iact
     
     if (test %in% c("wald2","score")) {
       # robust Wald (W1, W2) and score test-statistics, Silvapulle, 1996
@@ -160,7 +160,8 @@ icrlm.tests <- function(object, type="A", meq.alt = 0, tol = 1e-04, test="Fm") {
         }
         else {
           call.my <- list(Amat = Amat[1:meq.alt,,drop=FALSE], meq = meq.alt, 
-                          bvec = bvec[1:meq.alt])          
+                          bvec = bvec[1:meq.alt])
+          call.rlm[["data"]] <- as.name("Data")
           CALL <- c(call.rlm, call.my)
           if (any(duplicated(CALL))) {
             stop("duplicated elements in CALL.list")
@@ -169,7 +170,7 @@ icrlm.tests <- function(object, type="A", meq.alt = 0, tol = 1e-04, test="Fm") {
         }        
         beta.constr.alt <- coef(rfit)
           names(beta.constr.alt) <- var.names
-        iact <- rfit$iact
+        #iact <- rfit$iact
         
         if (test %in% c("wald2","score")) {
           # robust Wald (W1, W2) and score test-statistics, Silvapulle, 1996
@@ -226,12 +227,13 @@ icrlm.tests <- function(object, type="A", meq.alt = 0, tol = 1e-04, test="Fm") {
     cov <- t(X)%*%X
   }
   
-  OUT <- list(type = type, object.rlm = object$object.rlm, 
+  OUT <- list(type = type, test = test, object.rlm = object$object.rlm, 
               beta.constr = beta.constr,
               beta.constr.alt = if (type == "B" && meq.alt > 0L) {beta.constr.alt},
               beta.eqconstr = if (type == "A") { beta.eqconstr }, 
               cov = cov, Amat = Amat, bvec = bvec, meq = meq, 
-              meq.alt = meq.alt, iact = object$iact, Ts = Ts)
+              meq.alt = meq.alt, 
+              iact = object$iact, Ts = Ts)
   
     class(OUT) <- "icrlm.test"
   
