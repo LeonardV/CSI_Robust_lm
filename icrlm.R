@@ -1,5 +1,7 @@
+#compute constraint estimates
 icrlm <- function(object = NULL, Amat = NULL, bvec = NULL, meq = 0) { 
   
+  #some checks
   if(class(object)[1] != "rlm") {
     stop("object must be of class rlm().")
   }
@@ -30,10 +32,10 @@ icrlm <- function(object = NULL, Amat = NULL, bvec = NULL, meq = 0) {
                  " elements cannot be created", sep = ""))
   }
   
-  
   if(is.null(object$model)) {
     Y <- object$residuals + object$fitted
   } else {
+    Data <- object$model
     mfit <- object$model
     Y <- model.response(mfit)  
   }  
@@ -73,7 +75,7 @@ icrlm <- function(object = NULL, Amat = NULL, bvec = NULL, meq = 0) {
                 fitted.values = fitted(object), 
                 weights = object$weights, R2 = R2, R2.adjusted = R2.adjusted,
                 df.residual = df.residual, scale = object$s, 
-                VCOV = NULL, #loglik = ll, #Sigma.ml = Sigma,
+                VCOV = NULL, 
                 Amat = Amat, bvec = bvec, meq = meq, iact = 0L, 
                 converged = object$converged)
   }
@@ -89,6 +91,7 @@ icrlm <- function(object = NULL, Amat = NULL, bvec = NULL, meq = 0) {
         stop("test only applicable with \"psi=psi.bisquare\".")  
       }
     }
+    #fit inequality constrained model
     if (is.null(call.rlm[["formula"]])) {
       call.rlm[["data"]] <- NULL
       call.rlm[["x"]] <- NULL
@@ -99,9 +102,8 @@ icrlm <- function(object = NULL, Amat = NULL, bvec = NULL, meq = 0) {
     }
     else {
       call.my <- list(Amat = Amat, meq = meq, bvec = bvec)  
-      CALL <- c(call.rlm, call.my)
-      Data <- object$model
       call.rlm[["data"]] <- as.name("Data")
+      CALL <- c(call.rlm, call.my)
       rfit <- do.call("icrlm.formula", CALL)
     }
     
@@ -140,8 +142,8 @@ icrlm <- function(object = NULL, Amat = NULL, bvec = NULL, meq = 0) {
                 fitted.values = pred, 
                 weights = rfit$weights, R2 = R2, R2.adjusted = R2.adjusted,
                 df.residual = df.residual, scale = rfit$s, 
-                VCOV = NULL, #loglik = ll, #Sigma.ml = Sigma,
-                Amat = Amat, bvec = bvec, meq = meq, iact = 0L, 
+                VCOV = NULL, 
+                Amat = Amat, bvec = bvec, meq = meq, iact = iact, 
                 converged = object$converged)
   }
   class(OUT) <- c("icrlm")
