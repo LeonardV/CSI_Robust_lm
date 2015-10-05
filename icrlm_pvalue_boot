@@ -1,0 +1,175 @@
+icrlm.pboot <- function(object, constraints = constraints, 
+                        type = c("A", "B", "C"), R = 9999,
+                        parallel = c("no", "multicore", "snow"), ncpus = 1L, 
+                        cl = NULL, seed = NULL, verbose = FALSE, ...) {
+  
+  if(class(object) != "icrlm.test") {
+    stop("object must be of class icrlm.test.")
+  }
+  
+  if (missing(parallel)) 
+    parallel <- getOption("boot.parallel", "no")
+  parallel <- match.arg(parallel)
+  
+  object.rlm <- object$object.rlm
+  if(is.null(object.rlm$model)) {
+    Y <- object.rlm$residuals + object.rlm$fitted
+  } else {
+    Data <- object.rlm$model
+    mfit <- object.rlm$model
+    Y <- model.response(mfit)  
+  }  
+  # data
+  X <- model.matrix(object.rlm)[,,drop=FALSE]
+  mf <- object.rlm$model
+#  Data <- object.rlm$model
+  Amat <- object$Amat
+  bvec <- object$bvec
+  meq <- object$meq
+  meq.alt <- object$meq.alt
+  test <- object$test
+  Ts.org <- object$Ts
+  n <- dim(X)[1]
+  
+  have_mc <- have_snow <- FALSE
+  if (parallel != "no" && ncpus > 1L) {
+    if (parallel == "multicore") 
+      have_mc <- .Platform$OS.type != "windows"
+    else if (parallel == "snow") 
+      have_snow <- TRUE
+    if (!have_mc && !have_snow) 
+      ncpus <- 1L
+  }
+  
+  call.rlm <- as.list(object.rlm$call)
+  call.rlm <- call.rlm[-1]
+  if (call.rlm[["method"]] == "M") {
+    if (is.null(call.rlm[["psi"]])) {
+      stop("test only applicable with \"psi=psi.bisquare\".")
+    } 
+    else if (!(call.rlm[["psi"]] == "psi.bisquare")) {
+      stop("test only applicable with \"psi=psi.bisquare\".")  
+    }
+  }
+  
+  if(type == "A") {
+    if (is.null(call.rlm[["formula"]])) {
+      call.rlm[["data"]] <- NULL
+      call.rlm[["x"]] <- NULL
+      call.rlm[["y"]] <- NULL
+      call.my <- list(x = X, y = Y, Amat = Amat, meq = nrow(Amat), bvec = bvec)      
+      CALL <- c(call.my, call.rlm)
+      if(any(duplicated(CALL))) {
+        stop("duplicated elements in CALL.list")
+      }
+      rfit <- do.call("icrlm.formula", CALL)
+    }
+    else {
+      call.my <- list(Amat = Amat, meq = nrow(Amat), bvec = bvec) 
+      call.rlm[["data"]] <- as.name("Data")
+      CALL <- c(call.rlm, call.my)
+      if(any(duplicated(CALL))) {
+        stop("duplicated elements in CALL.list")
+      }
+      rfit <- do.call("icrlm.formula", CALL)
+    }  
+  }
+  else if(type == "B") {
+    if (is.null(call.rlm[["formula"]])) {
+      call.rlm[["data"]] <- NULL
+      call.rlm[["x"]] <- NULL
+      call.rlm[["y"]] <- NULL
+      call.my <- list(x = X, y = Y, Amat = Amat, meq = nrow(Amat), bvec = bvec)      
+      CALL <- c(call.my, call.rlm)
+      if(any(duplicated(CALL))) {
+        stop("duplicated elements in CALL.list")
+      }
+      rfit <- do.call("icrlm.formula", CALL)
+    }
+    else {
+      call.my <- list(Amat = Amat, meq = nrow(Amat), bvec = bvec) 
+      call.rlm[["data"]] <- as.name("Data")
+      CALL <- c(call.rlm, call.my)
+      if(any(duplicated(CALL))) {
+        stop("duplicated elements in CALL.list")
+      }
+      rfit <- do.call("icrlm.formula", CALL)
+    }  
+  }
+
+  r <- residuals(rfit)
+  yhat <- fitted(rfit)   
+  
+  Ts.boot <- vector("numeric", R)
+  
+  fn <- function(b) {
+#    if (verbose) 
+#      cat("iteration =", b)
+    if (!is.null(seed)) 
+      set.seed(seed + b)
+    if (!exists(".Random.seed", envir = .GlobalEnv)) 
+      runif(1)
+    RNGstate <- .Random.seed
+    
+    idx <- sample(dim(X)[1], replace=TRUE)
+    ystar <- yhat + r[idx]
+    simData <- data.frame(ystar, mf[,-1])
+      names(simData)[-1] <- names(mf)[-1]
+    call.rlm[["formula"]][[2]] <- as.name("ystar")
+    formula <- call.rlm[["formula"]]
+    fit <- update(object.rlm, formula=formula, data=simData)              
+    out <- restriktor(fit, constraints=constraints, test=test)                  #FIXME constraints are not passed through!
+    Ts <- out$Ts
+        
+#    if (verbose) {
+#      cat(" ...Ts =", Ts, "\n")
+#    }
+    
+    OUT <- Ts
+    OUT
+  }
+  
+  RR <- sum(R)
+  res <- if (ncpus > 1L && (have_mc || have_snow)) {
+    if (have_mc) {
+      parallel::mclapply(seq_len(RR), fn, mc.cores = ncpus)
+    }
+    else if (have_snow) {
+      if (is.null(cl)) {
+        cl <- parallel::makePSOCKcluster(rep("localhost", 
+                                             ncpus))
+        if (RNGkind()[1L] == "L'Ecuyer-CMRG") 
+          parallel::clusterSetRNGStream(cl)
+        res <- parallel::parLapply(cl, seq_len(RR), 
+                                   fn)
+        parallel::stopCluster(cl)
+        res
+      }
+      else parallel::parLapply(cl, seq_len(RR), fn)
+    }
+  }
+  else lapply(seq_len(RR), fn)
+  error.idx <- integer(0)
+  for (b in seq_len(RR)) {
+    if (!is.null(res[[b]])) {
+      Ts.boot[b] <- res[[b]]
+    }
+    else {
+      error.idx <- c(error.idx, b)
+    }
+  }
+  na.boot.idx <- which(is.na(Ts.boot), arr.ind = TRUE)
+  inf.boot.idx <- which(Ts.boot == Inf, arr.ind = TRUE)
+  idx <- c(na.boot.idx, inf.boot.idx)
+  idx.unique <- unique(idx)
+  Rboot.tot <- (R - length(idx.unique))
+  if (length(idx.unique) > 0) {
+    Ts.boot <- Ts.boot[-idx.unique, ]
+  }
+  
+  pvalue <- sum(Ts.boot > Ts.org) / Rboot.tot 
+  
+  OUT <- pvalue
+  
+  OUT     
+}
