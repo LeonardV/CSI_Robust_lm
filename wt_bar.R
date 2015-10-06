@@ -1,3 +1,4 @@
+#the ic.weights() function is taken from the ic.infer package.
 wt <- function(cov, meq) {
   if (meq == 0L) {
     wt.bar <- ic.infer:::ic.weights(cov)
