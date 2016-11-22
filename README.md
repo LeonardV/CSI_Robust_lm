@@ -1,1 +1,1 @@
-On size and power of inequality constrained robust tests for linear models
+WARNING: this function has been deprecated. Please use the restriktor package.
